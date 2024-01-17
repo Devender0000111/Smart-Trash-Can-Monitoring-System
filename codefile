@@ -1,0 +1,71 @@
+ORG 0
+MOV P2, #0FFH       ; make P2 an input port
+MOV TMOD, #20H      ; Timer 1, mode 2 (auto-reload)
+MOV TH1, #0FAH      ; 4800 baud rate
+MOV SCON, #50H      ; 8-bit, 1 stop, REN enabled
+SETB TR1            ; start Timer 1
+MOV DPTR, #MYDATA   ; load pointer for message
+; Initialize trash sensor input, display output, and buzzer output
+MOV P3, #00000000B  ; make P3 an output port for sensor power
+MOV P1, #00000000B  ; make P1 an input port for sensor data
+SETB P3.0           ; power on trash sensor
+MOV P0, #00000000B  ; make P0 an output port for display data
+MOV P4, #00000000B  ; make P4 an output port for buzzer
+; Initialize display with "TRASH" message
+MOV A, #"T"
+MOV P0, A
+ACALL DELAY
+MOV A, #"R"
+MOV P0, A
+ACALL DELAY
+MOV A, #"A"
+MOV P0, A
+ACALL DELAY
+MOV A, #"S"
+MOV P0, A
+ACALL DELAY
+MOV A, #"H"
+MOV P0, A
+ACALL DELAY
+H_1:
+    CLR A
+    MOVC A, @A+DPTR   ; get the character
+    JZ B_1            ; if last character, exit
+    ACALL SEND        ; otherwise call transfer
+    INC DPTR          ; next character
+    SJMP H_1          ; stay in loop
+B_1:
+    MOV A, P2         ; read data on P2
+    ACALL SEND        ; transfer it serially
+    ACALL RECV        ; get the serial data
+    ; Check trash sensor data
+    MOV A, P1         ; read trash sensor data
+ ANL A, #00000001B ; mask all but the first bit
+    JZ NOT_FULL       ; if trash can is not full, skip to next iteration
+    SETB P4.0         ; turn on buzzer
+    SJMP FULL         ; go to alarm
+NOT_FULL:
+    CLR P4.0          ; turn off buzzer
+FULL:
+    ; Display trash can status
+    MOV A, P1
+    ANL A, #00000001B
+    MOV P0, A
+    ACALL DELAY
+    MOV P0, #00000000B
+    ACALL DELAY
+ SJMP B_1          ; stay in loop
+; Alarm subroutine
+ALARM:
+    SETB P4.0         ; turn on buzzer
+    ACALL DELAY
+    CLR P4.0          ; turn off buzzer
+    ACALL DELAY
+    SJMP ALARM
+DELAY:
+    MOV R7, #10
+    MOV R6, #2
+L1: DJNZ R6, L1
+    DJNZ R7, L1
+    RET
+END
